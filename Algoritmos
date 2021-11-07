@@ -1,0 +1,260 @@
+Implementação computacional dos algoritmos referentes às estratégias de controle na interface IDE do Arduino.
+
+A implementação computacional do controle no Arduino foi realizada mantendo como base o código “toolbox_arduino_v5” , 
+desenvolvida por Bruno Jofret, de licença livre para uso em conjunto com a Arduino Toolbox na plataforma Xcos do Scilab, 
+permitindo a comunicação das duas partes via Serial. O código base desenvolvido por Bruno Jofret foi mantido, uma vez que ele é necessário à comunicação serial, 
+e são mostradas nesse material apenas as funções implementadas ao código original, bem como as alterações necessárias ao funcionamento dessas funções.
+
+*/Algoritmo 1 – Função de controle de feedback
+double u,a,b,c,d,e,P=0,I=0,D=0,N,Temp_SP,Kp,Ti,Td,Ku,Pu;
+double Temp,pin3,pin5,pin6,pin9,pin11,inttime,dectime,env,ep,beta;
+double time0=0, time1=0, I_atual=0, I_anterior=0, e_anterior=0, Temp_anterior=0;
+int i;
+void PID(){
+  //Definir ganho e periodo críticos
+  Ku = 134.00000;
+  Pu = 8.00000;
+  N  = 15.0000;
+  //Calculo de temperatura e do erro
+  Temp =((pin3+pin5/100.00000)-50.00000)/100.00000;
+  Temp_SP = pin11/100.000000;
+  e = Temp_SP - Temp;
+  time1 = inttime + dectime/100.000000; 
+  
+  //Definir o tipo de controlador
+  //1-> P     2-> PI      3-> PID 
+  i=1;
+
+  //CONTROLE P 
+  if (i==1){
+    
+    //Definindo ganhos    
+    Kp = 0.5000000000*Ku ;
+
+    //Calculo dos termos
+    P = e * Kp;
+    I = 0;
+    D = 0;
+  }
+
+  //CONTROLE PI
+  else if (i==2){
+    if(time1!=time0){
+      //Definindo ganhos
+      Kp = 0.45000*Ku;  
+      Ti = Pu/1.20000;    
+
+      //Termo proporcional
+      P= e * Kp;
+
+      //Termo integral
+      I_atual= Kp/Ti*(e + e_anterior)/2*(time1-time0);
+      I = I_atual + I;
+
+      //Anti wind-up
+      if (I>13.9840000){
+        I=13.98400000;
+       }
+      else if (I<-2.0160000){
+        I=-2.0160000;        
+       }
+
+       D=0.0000000;
+       time0 = time1;
+       e_anterior = e;
+    }
+   }
+
+    //CONTROLE PID
+    else if (i==3){
+ 
+      //Definindo ganhos
+      Kp = 0.600000*Ku;
+      Kp = 82.00000;
+      Ti = Pu/2;
+      Ti = 12.1020000;
+      Td = Pu/8;
+      Td = 0.78600000;
+          
+      if((time1-time0)>0){
+        
+        //Termo proporcional
+        P= e * Kp;
+  
+        //Termo integral
+        I_atual= Kp/Ti*(e + e_anterior)/2*(time1-time0);
+        I = I_atual + I;
+
+      //Anti wind-up
+      if (I>13.9840000){
+        I=13.98400000;
+       }
+      else if (I<-2.0160000){
+        I=-2.0160000;        
+       }
+        
+        //Termo derivativo
+          D = D*Td/(Td+N*(time1-time0))-Kp*Td*N*(Temp - Temp_anterior)/(Td+N*(time1-time0));
+          //D = -Kp*Td*(Temp - Temp_anterior)/(time1-time0);
+
+        //Ajuste de variáveis
+        time0 = time1;
+        e_anterior = e;
+        Temp_anterior = Temp;
+  
+      }
+
+    }
+    //Controle I-PD
+    else if (i==4){
+ 
+      //Definindo ganhos
+      Kp = 0.60000*Ku;
+      Ti = Pu/2.00000;
+      Td = Pu/8.00000;
+      beta=0.000;
+          
+      if((time1-time0)>0){
+        
+        //Termo proporcional
+        P= (beta*Temp_SP - Temp) * Kp;
+  
+        //Termo integral
+        I_atual= Kp/Ti*(e + e_anterior)/2*(time1-time0);
+        I = I_atual + I;
+
+        //Termo derivativo
+          D = D*Td/(Td+N*(time1-time0))-Kp*Td*N*(Temp - Temp_anterior)/(Td+N*(time1-time0));
+          //D = -Kp*Td*(Temp - Temp_anterior)/(time1-time0);
+
+        //Ajuste de variáveis
+        time0 = time1;
+        e_anterior = e;
+        Temp_anterior = Temp;
+      }
+    } 
+    
+    //Cálculo do sinal de saída
+    u = (P+I+D)*1000.0000;
+
+    //Ajuste da saturação
+    if (u>13984.00000){
+        u=13984.00000;
+      }
+    if (u<-2016.0000){ 
+        u=-2016.0000;     
+      }
+}
+
+
+
+Algoritmo 2 – Função Analog Read alterada
+  //case A -> Analog
+  if (val==65){//A -> Analog read
+    while (Serial.available()==0) {}; // Waiting char
+//    val=Serial.read();
+//    if (val==114){ //'r'-> read pin
+//       while (Serial.available()==0) {}; // Waiting char
+       val=Serial.read();
+       if (val>47 && val<67) { //from pin 0, to pin 19
+          pin=val-48; //number of the pin
+            agv=u;
+          //Serial.println(agv);
+          //Serial.print(agv);
+          Serial.write((uint8_t*)&agv,2); /* send binary value via serial  */   
+       }
+       val=-1;
+  }
+
+
+Algoritmo 3 – Função Analog Write alterada
+    else if (val==87){//W -> Analog write
+      while (Serial.available()==0) {}; // Waiting char
+      val=Serial.read();
+         if (val>47 && val<67) { //from pin 0 to pin 19
+            pin=val-48; //number of the pin
+            while (Serial.available()==0) {}; // Waiting char
+            val=Serial.read();
+            if (pin==3){
+              pin3=val;
+              a=a+1;
+            }
+            if(pin==5){
+              pin5=val;
+              b=b+1;
+            }
+            if(pin==6){
+               inttime=val;
+               c=c+1;
+            }
+            if(pin==9){
+              dectime=val;
+              d=d+1;
+            }
+            if(pin==11){
+              pin11=val;
+            }
+            if(a==b && a==c && a==d){
+              PID();  
+            }
+         }
+          val=-1;
+      }
+
+
+Algoritmo 4 – Função de controle de feedfoward
+double u,a,b,c,d,Temp,pin3,pin5,pin6,pin9,inttime,dectime,env,Temp_m, Q, Q_m,m,Cp,Ks,Ka,Kf,tau1,tau2;
+int i;      
+double time0=0, time1, Q_atual, Q_anterior=0, Temp_anterior=0;
+void FeedFoward(){
+  //Definir estado estacionário
+  Cp = 4.2000000000;
+  m = 1.00000000;
+  Ks = 0.2000000;
+  Ka = 125.00000;
+  Kf = -m*Cp/Ka/Ks;
+  
+
+  //Calculo de temperatura e do erro
+  Temp_m =((pin3+pin5/100.00000)-50.00000)/100.00000;
+  
+  time1 = inttime + dectime/100.000000; 
+  
+  //Definir o tipo de controlador
+  //1-> Estado Estacionário     2-> Lead-Lag
+  i=2;
+
+  //Estado estacionário
+  if (i==1){
+    Temp = Temp_m/Ks + 20.0000000;
+    Q = m * Cp * (40.00000-Temp);
+    Q_m = (Q - 840.000000)/Ka;
+
+    //Cálculo do sinal de saída
+    u = Q_m*100.00000;
+  }
+ 
+  //Lead-Lag
+  if (i==2){
+    if(time1!=time0){
+      tau1=1.00000000;
+      tau2=0.9000000000;
+      Q_atual = (Kf*(tau2*(Temp_m-Temp_anterior)/(time1-time0)+Temp_m)-Q_anterior)/(tau1/(time1-time0)+1.000000)+Q_anterior;
+      Q_anterior = Q_atual;
+      Temp_anterior = Temp_m;
+      time0=time1;
+
+      //Cálculo do sinal de saída
+      u = Q_atual*1000.00000;
+    }
+  }
+    
+    //Ajuste da saturação
+    if (u>13984.00000){
+        u=13984.00000;
+      }
+    if (u<-2016.0000){ 
+        u=-2016.0000;        
+      }
+}
+*/
